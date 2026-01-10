@@ -77,6 +77,27 @@ public class OrderController {
         }
     }
     
+    @PatchMapping("/{id}/payment-status")
+    public ResponseEntity<OrderResponse> updatePaymentStatus(
+            @PathVariable Long id,
+            @RequestBody String paymentStatus) {
+        try {
+            OrderStatus orderStatus;
+            if ("succeeded".equals(paymentStatus) || "PAID".equals(paymentStatus)) {
+                orderStatus = OrderStatus.CONFIRMED;
+            } else if ("failed".equals(paymentStatus) || "CANCELLED".equals(paymentStatus)) {
+                orderStatus = OrderStatus.CANCELLED;
+            } else {
+                orderStatus = OrderStatus.PENDING;
+            }
+            
+            OrderResponse response = orderService.updateOrderStatus(id, orderStatus);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
         try {
