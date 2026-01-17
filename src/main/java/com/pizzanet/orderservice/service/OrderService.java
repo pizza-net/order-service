@@ -24,6 +24,8 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final WebClient menuServiceClient;
     private final WebClient deliveryServiceClient;
+    private final WebClient authServiceClient;
+    private final EventPublisherService eventPublisher;
     
     @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
@@ -119,6 +121,21 @@ public class OrderService {
         }
     }
     
+    private String fetchUserEmail(Long userId) {
+        try {
+            UserDTO user = authServiceClient.get()
+                    .uri("/api/auth/users/{id}", userId)
+                    .retrieve()
+                    .bodyToMono(UserDTO.class)
+                    .block();
+            
+            return user != null ? user.getEmail() : "no-email@pizzanet.com";
+        } catch (Exception e) {
+            log.error("Failed to fetch user email for ID: {}", userId, e);
+            return "no-email@pizzanet.com";
+        }
+    }
+    
     public OrderResponse getOrderById(Long id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found with ID: " + id));
@@ -152,6 +169,26 @@ public class OrderService {
         Order updatedOrder = orderRepository.save(order);
         
         log.info("Order {} status updated to: {}", id, status);
+        
+        // Publikuj event do RabbitMQ
+        try {
+            String userEmail = fetchUserEmail(updatedOrder.getCustomerId());
+            
+            OrderStatusChangedEvent event = OrderStatusChangedEvent.builder()
+                    .orderId(updatedOrder.getId())
+                    .userId(updatedOrder.getCustomerId())
+                    .userEmail(userEmail)
+                    .orderStatus(status.name())
+                    .totalPrice(updatedOrder.getTotalPrice().doubleValue())
+                    .timestamp(java.time.LocalDateTime.now())
+                    .build();
+            
+            eventPublisher.publishOrderStatusChanged(event);
+        } catch (Exception e) {
+            log.error("Failed to publish order status event", e);
+            // Nie rzucamy wyjątku - zamówienie zostało zapisane
+        }
+        
         return mapToResponse(updatedOrder);
     }
     

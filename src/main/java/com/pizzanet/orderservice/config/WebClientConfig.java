@@ -21,4 +21,9 @@ public class WebClientConfig {
     public WebClient deliveryServiceClient(WebClient.Builder builder) {
         return builder.baseUrl("http://delivery-service:8083").build();
     }
+    
+    @Bean
+    public WebClient authServiceClient(WebClient.Builder builder) {
+        return builder.baseUrl("http://auth-service:8081").build();
+    }
 }
