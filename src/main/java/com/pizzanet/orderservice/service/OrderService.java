@@ -75,6 +75,25 @@ public class OrderService {
             savedOrder.setStatus(OrderStatus.CONFIRMED);
             savedOrder = orderRepository.save(savedOrder);
             log.info("Delivery created with ID: {} for order: {}", deliveryId, savedOrder.getId());
+            
+            // Publikuj event do RabbitMQ o nowym zamówieniu
+            try {
+                String userEmail = fetchUserEmail(savedOrder.getCustomerId());
+                
+                OrderStatusChangedEvent event = OrderStatusChangedEvent.builder()
+                        .orderId(savedOrder.getId())
+                        .userId(savedOrder.getCustomerId())
+                        .userEmail(userEmail)
+                        .orderStatus(savedOrder.getStatus().name())
+                        .totalPrice(savedOrder.getTotalPrice().doubleValue())
+                        .timestamp(java.time.LocalDateTime.now())
+                        .build();
+                
+                eventPublisher.publishOrderStatusChanged(event);
+            } catch (Exception e) {
+                log.error("Failed to publish order status event", e);
+                // Nie rzucamy wyjątku - zamówienie zostało zapisane
+            }
         } catch (Exception e) {
             log.error("Failed to create delivery for order: {}", savedOrder.getId(), e);
         }
